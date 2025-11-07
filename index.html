@@ -4,19 +4,27 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Mercado de Natal de Santar — Mapa Interativo</title>
+  <link rel="icon" type="image/png" href="favicon.png">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.locatecontrol@0.78.0/dist/L.Control.Locate.min.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.locatecontrol@0.78.0/dist/L.Control.Locate.min.js"></script>
+  <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
   <!-- QRCode library -->
   <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
   <style>
     html, body, #map { height: 100%; margin: 0; }
     body { font-family: system-ui, -apple-system, Segoe UI, sans-serif; }
     .pill { display:inline-block; background:#0f172a; color:#e2e8f0; padding:2px 8px; border-radius:999px; font-size:12px; }
-    .legend { position:absolute; bottom:16px; right:16px; background:rgba(15,23,42,.9); color:#e2e8f0; padding:10px 12px; border-radius:14px; max-width:260px; }
+    .legend {
+      position:absolute; bottom:16px; right:16px;
+      background:rgba(15,23,42,.9); color:#e2e8f0;
+      padding:10px 12px; border-radius:14px; max-width:260px; z-index:3000;
+    }
     .legend h3 { margin:0 0 6px 0; font-size:13px; }
-    /* QR button */
-    .qr-btn {
+    /* buttons top-right */
+    .qr-btn, .route-btn {
       position: absolute;
       top: 16px;
       right: 16px;
@@ -29,8 +37,11 @@
       font-size: 13px;
       z-index: 5000;
     }
-    .qr-btn:hover { background:#111827; }
-    /* Modal */
+    .route-btn {
+      right: 150px;
+    }
+    .qr-btn:hover, .route-btn:hover { background:#111827; }
+    /* QR modal */
     .qr-overlay {
       position: fixed;
       inset: 0;
@@ -68,7 +79,8 @@
 <body>
   <div id="map"></div>
 
-  <!-- floating button -->
+  <!-- buttons -->
+  <button class="route-btn" id="goToStart">🧭 Ir para o início do mercado</button>
   <button class="qr-btn" id="openQr">📱 QR do mapa</button>
 
   <!-- legend -->
@@ -97,19 +109,20 @@
   </div>
 
   <script>
-    // Mapa base
-    const map = L.map('map').setView([40.5709815, -7.8907183], 18);
+    // 1. Base map
+    const START_COORDS = [40.5709815, -7.8907183]; // entrada/saída
+    const map = L.map('map').setView(START_COORDS, 18);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
     L.control.locate({ strings: { title: 'A minha localização' } }).addTo(map);
 
-    // pontos do percurso (start == finish)
+    // 2. Route points (loop)
     const ROUTE_POINTS = [
       {
         name: 'Rua do Estremadouro',
         desc: 'Rua das Grinaldas · Entrada / Saída do Mercado',
-        coords: [40.5709815, -7.8907183]
+        coords: START_COORDS
       },
       {
         name: 'Largo do Paço',
@@ -141,7 +154,6 @@
         desc: 'Rua das Estrelas',
         query: 'Rua da Miragaia, Santar, Portugal'
       },
-      // 3 pontos da avenida
       {
         name: 'Av. Viscondessa de Taveiro (1)',
         desc: 'Estrelas',
@@ -157,11 +169,10 @@
         desc: 'Estrelas',
         coords: [40.5708916, -7.8908457]
       },
-      // fechar o círculo
       {
         name: 'Rua do Estremadouro (Fim)',
         desc: 'Regresso ao ponto inicial',
-        coords: [40.5709815, -7.8907183]
+        coords: START_COORDS
       }
     ];
 
@@ -199,7 +210,7 @@
 
     buildRoute().catch(e => alert('Erro ao construir percurso: ' + e.message));
 
-    // QR overlay logic
+    // 3. QR overlay
     const qrUrl = "https://nevessusie.github.io/mercadodesantar/";
     const openBtn = document.getElementById('openQr');
     const overlay = document.getElementById('qrOverlay');
@@ -216,13 +227,42 @@
         correctLevel: QRCode.CorrectLevel.M
       });
     });
+    closeBtn.addEventListener('click', () => overlay.style.display = 'none');
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.style.display = 'none'; });
 
-    closeBtn.addEventListener('click', () => {
-      overlay.style.display = 'none';
-    });
-
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.style.display = 'none';
+    // 4. "Ir para o início do mercado" = routing from user to START
+    let userRoute = null;
+    document.getElementById('goToStart').addEventListener('click', () => {
+      if (!navigator.geolocation) {
+        alert('O seu dispositivo não permite localização.');
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(pos => {
+        const userLatLng = L.latLng(pos.coords.latitude, pos.coords.longitude);
+        // remove previous route
+        if (userRoute) {
+          map.removeControl(userRoute);
+          userRoute = null;
+        }
+        userRoute = L.Routing.control({
+          waypoints: [
+            userLatLng,
+            L.latLng(START_COORDS[0], START_COORDS[1])
+          ],
+          router: L.Routing.osrmv1({
+            serviceUrl: 'https://routing.openstreetmap.de/routed-foot/route/v1'
+          }),
+          lineOptions: {
+            styles: [{ color: '#22c55e', weight: 5, opacity: 0.9 }]
+          },
+          addWaypoints: false,
+          draggableWaypoints: false,
+          fitSelectedRoutes: true,
+          show: false
+        }).addTo(map);
+      }, () => {
+        alert('Não foi possível obter a localização.');
+      });
     });
   </script>
 </body>
