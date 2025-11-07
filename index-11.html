@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mercado de Natal de Santar — Mapa Interativo (loop correto)</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.locatecontrol@0.78.0/dist/L.Control.Locate.min.js"></script>
+  <style>
+    html, body, #map { height: 100%; margin: 0; }
+    body { font-family: system-ui, -apple-system, Segoe UI, sans-serif; }
+    .pill { display:inline-block; background:#0f172a; color:#e2e8f0; padding:2px 8px; border-radius:999px; font-size:12px; }
+    .legend { position:absolute; bottom:16px; right:16px; background:rgba(15,23,42,.9); color:#e2e8f0; padding:10px 12px; border-radius:14px; max-width:260px; }
+    .legend h3 { margin:0 0 6px 0; font-size:13px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="legend">
+    <h3>Percurso do Mercado</h3>
+    1. Ponto de Início/Fim (Rua do Estremadouro)<br>
+    2. Largo do Paço — Mercado do Natal: Estrelas e Árvores<br>
+    3. Rua da Carreira — Luzes Lágrimas<br>
+    4. Rua Sacadura Cabral — Luzes de Natal<br>
+    5. Rua Direita — Rua das Bengalas<br>
+    6. Travessa da Miragaia — Travessa Dourada<br>
+    7. Rua da Miragaia — Rua das Estrelas<br>
+    8–10. Av. Viscondessa de Taveiro — Estrelas<br>
+    11. Volta ao ponto inicial
+  </div>
+  <script>
+    const map = L.map('map').setView([40.5709815, -7.8907183], 18);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+    L.control.locate({ strings: { title: 'A minha localização' } }).addTo(map);
+
+    // Route points in the exact order, start == finish
+    const ROUTE_POINTS = [
+      {
+        name: 'Rua do Estremadouro',
+        desc: 'Rua das Grinaldas · Entrada / Saída do Mercado',
+        coords: [40.5709815, -7.8907183]
+      },
+      {
+        name: 'Largo do Paço',
+        desc: 'Mercado do Natal · Estrelas e Árvores',
+        coords: [40.572213, -7.891578]
+      },
+      {
+        name: 'Rua da Carreira',
+        desc: 'Luzes Lágrimas',
+        query: 'Rua da Carreira, Santar, Portugal'
+      },
+      {
+        name: 'Rua Sacadura Cabral',
+        desc: 'Luzes de Natal',
+        query: 'Rua Sacadura Cabral, Santar, Portugal'
+      },
+      {
+        name: 'Rua Direita',
+        desc: 'Rua das Bengalas',
+        query: 'Rua Direita, Santar, Portugal'
+      },
+      {
+        name: 'Travessa da Miragaia',
+        desc: 'Travessa Dourada',
+        query: 'Travessa da Miragaia, Santar, Portugal'
+      },
+      {
+        name: 'Rua da Miragaia',
+        desc: 'Rua das Estrelas',
+        query: 'Rua da Miragaia, Santar, Portugal'
+      },
+      // Avenida Viscondessa de Taveiro (3 points, same direction)
+      {
+        name: 'Av. Viscondessa de Taveiro (1)',
+        desc: 'Estrelas',
+        coords: [40.5703380, -7.8920255]
+      },
+      {
+        name: 'Av. Viscondessa de Taveiro (2)',
+        desc: 'Estrelas',
+        coords: [40.5705491, -7.8916316]
+      },
+      {
+        name: 'Av. Viscondessa de Taveiro (3)',
+        desc: 'Estrelas',
+        coords: [40.5708916, -7.8908457]
+      },
+      // back to start to close the loop
+      {
+        name: 'Rua do Estremadouro (Fim)',
+        desc: 'Regresso ao ponto inicial',
+        coords: [40.5709815, -7.8907183]
+      }
+    ];
+
+    async function geocode(q) {
+      const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(q));
+      const data = await res.json();
+      if (!data.length) throw new Error('Não encontrado: ' + q);
+      return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+    }
+
+    async function resolvePoint(p) {
+      if (p.coords) return p.coords;
+      return await geocode(p.query);
+    }
+
+    async function buildRoute() {
+      const coords = [];
+      for (const p of ROUTE_POINTS) {
+        coords.push(await resolvePoint(p));
+      }
+
+      // markers
+      coords.forEach((c, i) => {
+        const p = ROUTE_POINTS[i];
+        L.circleMarker(c, {
+          radius: 7,
+          weight: 2,
+          color: '#0f172a',
+          fillColor: i === 0 ? '#22c55e' : '#ffffff',
+          fillOpacity: 0.95
+        }).addTo(map)
+          .bindPopup(`<strong>${i+1}. ${p.name}</strong><br>${p.desc || ''}`);
+      });
+
+      // polyline forms the loop
+      const line = L.polyline(coords, { color:'#e11d48', weight:6, opacity:0.95 }).addTo(map);
+      map.fitBounds(line.getBounds().pad(0.2));
+    }
+
+    buildRoute().catch(e => alert('Erro ao construir percurso: ' + e.message));
+  </script>
+</body>
+</html>
