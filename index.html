@@ -11,36 +11,50 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.locatecontrol@0.78.0/dist/L.Control.Locate.min.js"></script>
   <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
-  <!-- QRCode library -->
   <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
   <style>
     html, body, #map { height: 100%; margin: 0; }
     body { font-family: system-ui, -apple-system, Segoe UI, sans-serif; }
     .pill { display:inline-block; background:#0f172a; color:#e2e8f0; padding:2px 8px; border-radius:999px; font-size:12px; }
-    .legend {
-      position:absolute; bottom:16px; right:16px;
-      background:rgba(15,23,42,.9); color:#e2e8f0;
-      padding:10px 12px; border-radius:14px; max-width:260px; z-index:3000;
-    }
-    .legend h3 { margin:0 0 6px 0; font-size:13px; }
-    /* buttons top-right */
     .qr-btn, .route-btn {
-      position: absolute;
-      top: 16px;
-      right: 16px;
-      background: #0f172a;
-      color: #e2e8f0;
-      border: 1px solid rgba(255,255,255,.15);
-      border-radius: 999px;
-      padding: 8px 14px;
-      cursor: pointer;
-      font-size: 13px;
-      z-index: 5000;
+      position: absolute; top: 16px; background: #0f172a; color: #e2e8f0;
+      border: 1px solid rgba(255,255,255,.15); border-radius: 999px;
+      padding: 8px 14px; cursor: pointer; font-size: 13px; z-index: 5000;
     }
-    .route-btn {
-      right: 150px;
-    }
+    .route-btn { right: 150px; }
+    .qr-btn { right: 16px; }
     .qr-btn:hover, .route-btn:hover { background:#111827; }
+    /* small panel for buttons */
+    .poi-panel {
+      position: absolute;
+      left: 16px;
+      top: 70px;
+      background: rgba(15,23,42,.85);
+      padding: 8px;
+      border-radius: 12px;
+      z-index: 4000;
+      max-width: 190px;
+    }
+    .poi-panel h4 {
+      margin: 0 0 6px 0;
+      color: #e2e8f0;
+      font-size: 13px;
+    }
+    .poi-panel button {
+      width: 100%;
+      background: rgba(255,255,255,.03);
+      border: 1px solid rgba(255,255,255,.04);
+      color: #e2e8f0;
+      font-size: 12px;
+      padding: 4px 6px;
+      border-radius: 8px;
+      text-align: left;
+      margin-bottom: 4px;
+      cursor: pointer;
+    }
+    .poi-panel button:hover {
+      background: rgba(255,255,255,.09);
+    }
     /* QR modal */
     .qr-overlay {
       position: fixed;
@@ -83,8 +97,18 @@
   <button class="route-btn" id="goToStart">🧭 Ir para o início do mercado</button>
   <button class="qr-btn" id="openQr">📱 QR do mapa</button>
 
-  <!-- legend -->
-
+  <!-- small POI panel -->
+  <div class="poi-panel">
+    <h4>Locais do percurso</h4>
+    <button data-poi="rua-estremadouro">1. Rua do Estremadouro</button>
+    <button data-poi="largo-paco">2. Largo do Paço</button>
+    <button data-poi="rua-carreira">3. Rua da Carreira</button>
+    <button data-poi="rua-sacadura">4. Rua Sacadura Cabral</button>
+    <button data-poi="rua-direita">5. Rua Direita</button>
+    <button data-poi="travessa-miragaia">6. Travessa da Miragaia</button>
+    <button data-poi="rua-miragaia">7. Rua da Miragaia</button>
+    <button data-poi="av-taveiro">8. Av. Viscondessa de Taveiro</button>
+  </div>
 
   <!-- QR modal -->
   <div class="qr-overlay" id="qrOverlay">
@@ -98,70 +122,64 @@
   </div>
 
   <script>
-    // 1. Base map
-    const START_COORDS = [40.5709815, -7.8907183]; // entrada/saída
+    const START_COORDS = [40.5709815, -7.8907183];
+
+    // 1. Map
     const map = L.map('map').setView(START_COORDS, 18);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
     L.control.locate({ strings: { title: 'A minha localização' } }).addTo(map);
 
-    // 2. Route points (loop)
+    // 2. Route points
     const ROUTE_POINTS = [
       {
+        key: 'rua-estremadouro',
         name: 'Rua do Estremadouro',
         desc: 'Rua das Grinaldas · Entrada / Saída do Mercado',
         coords: START_COORDS
       },
       {
+        key: 'largo-paco',
         name: 'Largo do Paço',
         desc: 'Mercado do Natal · Estrelas e Árvores',
         coords: [40.572213, -7.891578]
       },
       {
+        key: 'rua-carreira',
         name: 'Rua da Carreira',
         desc: 'Luzes Lágrimas',
         query: 'Rua da Carreira, Santar, Portugal'
       },
       {
+        key: 'rua-sacadura',
         name: 'Rua Sacadura Cabral',
         desc: 'Luzes de Natal',
         query: 'Rua Sacadura Cabral, Santar, Portugal'
       },
       {
+        key: 'rua-direita',
         name: 'Rua Direita',
         desc: 'Rua das Bengalas',
         query: 'Rua Direita, Santar, Portugal'
       },
       {
+        key: 'travessa-miragaia',
         name: 'Travessa da Miragaia',
         desc: 'Travessa Dourada',
         query: 'Travessa da Miragaia, Santar, Portugal'
       },
       {
+        key: 'rua-miragaia',
         name: 'Rua da Miragaia',
         desc: 'Rua das Estrelas',
         query: 'Rua da Miragaia, Santar, Portugal'
       },
       {
-        name: 'Av. Viscondessa de Taveiro (1)',
+        key: 'av-taveiro',
+        name: 'Av. Viscondessa de Taveiro',
         desc: 'Estrelas',
-        coords: [40.5703380, -7.8920255]
-      },
-      {
-        name: 'Av. Viscondessa de Taveiro (2)',
-        desc: 'Estrelas',
-        coords: [40.5705491, -7.8916316]
-      },
-      {
-        name: 'Av. Viscondessa de Taveiro (3)',
-        desc: 'Estrelas',
-        coords: [40.5708916, -7.8908457]
-      },
-      {
-        name: 'Rua do Estremadouro (Fim)',
-        desc: 'Regresso ao ponto inicial',
-        coords: START_COORDS
+        coords: [40.5708916, -7.8908457] // last of the 3 points
       }
     ];
 
@@ -177,26 +195,28 @@
       return await geocode(p.query);
     }
 
+    const markerMap = {}; // key -> marker
+
     async function buildRoute() {
       const coords = [];
       for (const p of ROUTE_POINTS) {
-        coords.push(await resolvePoint(p));
-      }
-      coords.forEach((c, i) => {
-        const p = ROUTE_POINTS[i];
-        L.circleMarker(c, {
+        const c = await resolvePoint(p);
+        coords.push(c);
+        const m = L.circleMarker(c, {
           radius: 7,
           weight: 2,
           color: '#0f172a',
-          fillColor: i === 0 ? '#22c55e' : '#ffffff',
+          fillColor: p.key === 'rua-estremadouro' ? '#22c55e' : '#ffffff',
           fillOpacity: 0.95
         }).addTo(map)
-          .bindPopup(`<strong>${i+1}. ${p.name}</strong><br>${p.desc || ''}`);
-      });
-      const line = L.polyline(coords, { color:'#e11d48', weight:6, opacity:0.95 }).addTo(map);
-      map.fitBounds(line.getBounds().pad(0.2));
+          .bindPopup(`<strong>${p.name}</strong><br>${p.desc || ''}`);
+        markerMap[p.key] = m;
+      }
+      // close the loop back to start
+      coords.push(START_COORDS);
+      L.polyline(coords, { color:'#e11d48', weight:6, opacity:0.95 }).addTo(map);
+      map.fitBounds(L.polyline(coords).getBounds().pad(0.2));
     }
-
     buildRoute().catch(e => alert('Erro ao construir percurso: ' + e.message));
 
     // 3. QR overlay
@@ -219,7 +239,7 @@
     closeBtn.addEventListener('click', () => overlay.style.display = 'none');
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.style.display = 'none'; });
 
-    // 4. "Ir para o início do mercado" = routing from user to START
+    // 4. Routing from user to start
     let userRoute = null;
     document.getElementById('goToStart').addEventListener('click', () => {
       if (!navigator.geolocation) {
@@ -228,7 +248,6 @@
       }
       navigator.geolocation.getCurrentPosition(pos => {
         const userLatLng = L.latLng(pos.coords.latitude, pos.coords.longitude);
-        // remove previous route
         if (userRoute) {
           map.removeControl(userRoute);
           userRoute = null;
@@ -241,19 +260,28 @@
           router: L.Routing.osrmv1({
             serviceUrl: 'https://routing.openstreetmap.de/routed-foot/route/v1'
           }),
-          lineOptions: {
-            styles: [{ color: '#22c55e', weight: 5, opacity: 0.9 }]
-          },
+          lineOptions: { styles: [{ color: '#22c55e', weight: 5, opacity: 0.9 }] },
           addWaypoints: false,
           draggableWaypoints: false,
           fitSelectedRoutes: true,
           show: false
         }).addTo(map);
-      }, () => {
-        alert('Não foi possível obter a localização.');
+      }, () => alert('Não foi possível obter a localização.'));
+    });
+
+    // 5. make buttons open popups
+    document.querySelectorAll('.poi-panel button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.getAttribute('data-poi');
+        const marker = markerMap[key];
+        if (marker) {
+          map.setView(marker.getLatLng(), 18);
+          marker.openPopup();
+        }
       });
     });
   </script>
 </body>
 </html>
 
+     
