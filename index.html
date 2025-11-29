@@ -4,27 +4,51 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Mercado de Natal de Santar — Mapa Interativo</title>
+  <!-- Favicon: make sure favicon.png exists in the repo root -->
   <link rel="icon" type="image/png" href="favicon.png">
+
+  <!-- Leaflet & plugins -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet.locatecontrol@0.78.0/dist/L.Control.Locate.min.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.locatecontrol@0.78.0/dist/L.Control.Locate.min.js"></script>
   <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
   <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
+
   <style>
     html, body, #map { height: 100%; margin: 0; }
     body { font-family: system-ui, -apple-system, Segoe UI, sans-serif; }
-    .pill { display:inline-block; background:#0f172a; color:#e2e8f0; padding:2px 8px; border-radius:999px; font-size:12px; }
-    .qr-btn, .route-btn {
-      position: absolute; top: 16px; background: #0f172a; color: #e2e8f0;
-      border: 1px solid rgba(255,255,255,.15); border-radius: 999px;
-      padding: 8px 14px; cursor: pointer; font-size: 13px; z-index: 5000;
+    .pill {
+      display:inline-block;
+      background:#0f172a;
+      color:#e2e8f0;
+      padding:2px 8px;
+      border-radius:999px;
+      font-size:12px;
     }
-    .route-btn { right: 150px; }
+
+    /* top-right buttons */
+    .qr-btn, .route-btn, .clear-btn {
+      position: absolute;
+      top: 16px;
+      background: #0f172a;
+      color: #e2e8f0;
+      border: 1px solid rgba(255,255,255,.15);
+      border-radius: 999px;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-size: 13px;
+      z-index: 5000;
+      white-space: nowrap;
+    }
+    .route-btn { right: 230px; }
+    .clear-btn { right: 150px; }
     .qr-btn { right: 16px; }
-    .qr-btn:hover, .route-btn:hover { background:#111827; }
-    /* small panel for buttons */
+    .qr-btn:hover, .route-btn:hover, .clear-btn:hover { background:#111827; }
+
+    /* POI panel (left side) */
     .poi-panel {
       position: absolute;
       left: 16px;
@@ -55,6 +79,7 @@
     .poi-panel button:hover {
       background: rgba(255,255,255,.09);
     }
+
     /* QR modal */
     .qr-overlay {
       position: fixed;
@@ -93,11 +118,12 @@
 <body>
   <div id="map"></div>
 
-  <!-- buttons -->
+  <!-- top buttons -->
   <button class="route-btn" id="goToStart">🧭 Ir para o início do mercado</button>
+  <button class="clear-btn" id="clearRoute">🧹 Limpar rota</button>
   <button class="qr-btn" id="openQr">📱 QR do mapa</button>
 
-  <!-- small POI panel -->
+  <!-- left POI panel -->
   <div class="poi-panel">
     <h4>Locais do percurso</h4>
     <button data-poi="rua-estremadouro">1. Rua do Estremadouro</button>
@@ -123,6 +149,7 @@
 
   <script>
     const START_COORDS = [40.5709815, -7.8907183];
+    const MAP_URL = "https://nevessusie.github.io/mercadodesantar/";
 
     // 1. Map
     const map = L.map('map').setView(START_COORDS, 18);
@@ -131,7 +158,7 @@
     }).addTo(map);
     L.control.locate({ strings: { title: 'A minha localização' } }).addTo(map);
 
-    // 2. Route points
+    // 2. Data structure for route points
     const ROUTE_POINTS = [
       {
         key: 'rua-estremadouro',
@@ -179,98 +206,121 @@
         key: 'av-taveiro',
         name: 'Av. Viscondessa de Taveiro',
         desc: 'Estrelas',
-        coords: [40.5708916, -7.8908457] // last of the 3 points
+        coords: [40.5708916, -7.8908457] // final avenida point
       }
     ];
 
+    // 3. Geocoding helpers
     async function geocode(q) {
       const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(q));
       const data = await res.json();
       if (!data.length) throw new Error('Não encontrado: ' + q);
       return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
     }
-
     async function resolvePoint(p) {
       if (p.coords) return p.coords;
       return await geocode(p.query);
     }
 
-    const markerMap = {}; // key -> marker
-
-    async function buildRoute() {
-      const coords = [];
-      for (const p of ROUTE_POINTS) {
-        const c = await resolvePoint(p);
-        coords.push(c);
-        const m = L.circleMarker(c, {
-          radius: 7,
-          weight: 2,
-          color: '#0f172a',
-          fillColor: p.key === 'rua-estremadouro' ? '#22c55e' : '#ffffff',
-          fillOpacity: 0.95
-        }).addTo(map)
-          .bindPopup(`<strong>${p.name}</strong><br>${p.desc || ''}`);
-        markerMap[p.key] = m;
-      }
-      // close the loop back to start
-      coords.push(START_COORDS);
-      L.polyline(coords, { color:'#e11d48', weight:6, opacity:0.95 }).addTo(map);
-      map.fitBounds(L.polyline(coords).getBounds().pad(0.2));
-    }
-    buildRoute().catch(e => alert('Erro ao construir percurso: ' + e.message));
-
-    // 3. QR overlay
-    const qrUrl = "https://nevessusie.github.io/mercadodesantar/";
-    const openBtn = document.getElementById('openQr');
-    const overlay = document.getElementById('qrOverlay');
-    const closeBtn = document.getElementById('closeQr');
-
-    openBtn.addEventListener('click', () => {
-      overlay.style.display = 'flex';
-      const box = document.getElementById('qrcode');
-      box.innerHTML = '';
-      new QRCode(box, {
-        text: qrUrl,
-        width: 200,
-        height: 200,
-        correctLevel: QRCode.CorrectLevel.M
-      });
-    });
-    closeBtn.addEventListener('click', () => overlay.style.display = 'none');
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.style.display = 'none'; });
-
-    // 4. Routing from user to start
+    // 4. Routing helpers
     let userRoute = null;
-    document.getElementById('goToStart').addEventListener('click', () => {
+    const markerMap = {};  // key -> marker
+    const coordMap  = {};  // key -> [lat, lng]
+
+    function clearUserRoute() {
+      if (userRoute) {
+        map.removeControl(userRoute);
+        userRoute = null;
+      }
+    }
+
+    function routeFromMyLocationTo(destLatLng) {
       if (!navigator.geolocation) {
         alert('O seu dispositivo não permite localização.');
         return;
       }
       navigator.geolocation.getCurrentPosition(pos => {
         const userLatLng = L.latLng(pos.coords.latitude, pos.coords.longitude);
-        if (userRoute) {
-          map.removeControl(userRoute);
-          userRoute = null;
-        }
+        clearUserRoute();
         userRoute = L.Routing.control({
           waypoints: [
             userLatLng,
-            L.latLng(START_COORDS[0], START_COORDS[1])
+            L.latLng(destLatLng.lat, destLatLng.lng)
           ],
           router: L.Routing.osrmv1({
             serviceUrl: 'https://routing.openstreetmap.de/routed-foot/route/v1'
           }),
-          lineOptions: { styles: [{ color: '#22c55e', weight: 5, opacity: 0.9 }] },
+          lineOptions: { styles: [{ color: '#22c55e', weight: 5, opacity: 0.95 }] },
           addWaypoints: false,
           draggableWaypoints: false,
           fitSelectedRoutes: true,
           show: false
         }).addTo(map);
-      }, () => alert('Não foi possível obter a localização.'));
+      }, () => {
+        alert('Não foi possível obter a localização.');
+      });
+    }
+
+    function routeToKey(key) {
+      const c = coordMap[key];
+      if (!c) {
+        alert('Destino inválido.');
+        return;
+      }
+      routeFromMyLocationTo(L.latLng(c[0], c[1]));
+    }
+
+    // 5. Build route, markers & polyline
+    async function buildRoute() {
+      const coords = [];
+
+      for (const p of ROUTE_POINTS) {
+        const c = await resolvePoint(p);
+        coords.push(c);
+        coordMap[p.key] = c;
+
+        const popupHtml = `
+          <strong>${p.name}</strong><br>
+          ${p.desc || ''}
+          <div style="margin-top:6px">
+            <button data-route-key="${p.key}" class="route-here"
+              style="background:#0f172a;color:#e2e8f0;border:1px solid rgba(255,255,255,.15);
+                     border-radius:8px;padding:4px 8px;cursor:pointer;font-size:12px">
+              🧭 Traçar caminho até aqui
+            </button>
+          </div>
+        `;
+
+        const m = L.circleMarker(c, {
+          radius: 7,
+          weight: 2,
+          color: '#0f172a',
+          fillColor: p.key === 'rua-estremadouro' ? '#22c55e' : '#ffffff',
+          fillOpacity: 0.95
+        }).addTo(map).bindPopup(popupHtml);
+
+        markerMap[p.key] = m;
+      }
+
+      // Close loop back to start (for the red route)
+      coords.push(START_COORDS);
+      const routeLine = L.polyline(coords, { color:'#e11d48', weight:6, opacity:0.95 }).addTo(map);
+      map.fitBounds(routeLine.getBounds().pad(0.2));
+    }
+
+    buildRoute().catch(e => alert('Erro ao construir percurso: ' + e.message));
+
+    // 6. Wire popups: “Traçar caminho até aqui”
+    map.on('popupopen', (e) => {
+      const btn = e.popup.getElement().querySelector('button.route-here');
+      if (btn) {
+        const key = btn.getAttribute('data-route-key');
+        btn.addEventListener('click', () => routeToKey(key));
+      }
     });
 
-    // 5. make buttons open popups
-    document.querySelectorAll('.poi-panel button').forEach(btn => {
+    // 7. Left panel buttons (open popup & focus)
+    document.querySelectorAll('.poi-panel button[data-poi]').forEach(btn => {
       btn.addEventListener('click', () => {
         const key = btn.getAttribute('data-poi');
         const marker = markerMap[key];
@@ -280,8 +330,35 @@
         }
       });
     });
+
+    // 8. “Ir para o início do mercado” button
+    document.getElementById('goToStart').addEventListener('click', () => {
+      routeFromMyLocationTo(L.latLng(START_COORDS[0], START_COORDS[1]));
+    });
+
+    // 9. Clear route button
+    document.getElementById('clearRoute').addEventListener('click', clearUserRoute);
+
+    // 10. QR overlay
+    const openBtn = document.getElementById('openQr');
+    const overlay = document.getElementById('qrOverlay');
+    const closeBtn = document.getElementById('closeQr');
+
+    openBtn.addEventListener('click', () => {
+      overlay.style.display = 'flex';
+      const box = document.getElementById('qrcode');
+      box.innerHTML = '';
+      new QRCode(box, {
+        text: MAP_URL,
+        width: 200,
+        height: 200,
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    });
+    closeBtn.addEventListener('click', () => overlay.style.display = 'none');
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.style.display = 'none';
+    });
   </script>
 </body>
 </html>
-
-     
