@@ -15,7 +15,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.locatecontrol@0.78.0/dist/L.Control.Locate.min.js"></script>
   <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
-  <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js"></script>
+  
 
   <style>
     html, body, #map { height: 100%; margin: 0; }
@@ -138,14 +138,15 @@
 
   <!-- QR modal -->
   <div class="qr-overlay" id="qrOverlay">
-    <div class="qr-box">
-      <button class="qr-close" id="closeQr">×</button>
-      <h3>QR do Mapa</h3>
-      <p>Scan para abrir:</p>
-      <div id="qrcode" style="width:200px;height:200px;margin:0 auto;"></div>
-      <div class="qr-url">https://nevessusie.github.io/mercadodesantar/</div>
-    </div>
+  <div class="qr-box">
+    <button class="qr-close" id="closeQr">×</button>
+    <h3>QR do Mapa</h3>
+    <p>Scan para abrir:</p>
+    <img src="qrcode.png" alt="QR code do mapa" style="width:200px;height:200px;margin:0 auto;display:block;">
+    <div class="qr-url">https://nevessusie.github.io/mercadodesantar/</div>
   </div>
+</div>
+
 
   <script>
     const START_COORDS = [40.5709815, -7.8907183];
@@ -340,25 +341,21 @@
     document.getElementById('clearRoute').addEventListener('click', clearUserRoute);
 
     // 10. QR overlay
-    const openBtn = document.getElementById('openQr');
-    const overlay = document.getElementById('qrOverlay');
-    const closeBtn = document.getElementById('closeQr');
+   // 10. QR overlay (static PNG)
+const openBtn = document.getElementById('openQr');
+const overlay = document.getElementById('qrOverlay');
+const closeBtn = document.getElementById('closeQr');
 
-    openBtn.addEventListener('click', () => {
-      overlay.style.display = 'flex';
-      const box = document.getElementById('qrcode');
-      box.innerHTML = '';
-      new QRCode(box, {
-        text: MAP_URL,
-        width: 200,
-        height: 200,
-        correctLevel: QRCode.CorrectLevel.M
-      });
-    });
-    closeBtn.addEventListener('click', () => overlay.style.display = 'none');
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.style.display = 'none';
-    });
+openBtn.addEventListener('click', () => {
+  overlay.style.display = 'flex';
+});
+
+closeBtn.addEventListener('click', () => overlay.style.display = 'none');
+
+overlay.addEventListener('click', (e) => {
+  if (e.target === overlay) overlay.style.display = 'none';
+});
+
   </script>
 </body>
 </html>
