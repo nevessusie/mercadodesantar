@@ -4,7 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Mercado de Natal de Santar — Mapa Interativo</title>
-  <!-- Favicon: make sure favicon.png exists in the repo root -->
+
+  <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png">
 
   <!-- Leaflet & plugins -->
@@ -15,11 +16,11 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.locatecontrol@0.78.0/dist/L.Control.Locate.min.js"></script>
   <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
-  
 
   <style>
     html, body, #map { height: 100%; margin: 0; }
     body { font-family: system-ui, -apple-system, Segoe UI, sans-serif; }
+
     .pill {
       display:inline-block;
       background:#0f172a;
@@ -29,35 +30,43 @@
       font-size:12px;
     }
 
-    /* top-right buttons */
-    .qr-btn, .route-btn, .clear-btn {
+    /* top buttons */
+    .top-buttons {
       position: absolute;
-      top: 16px;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 6px;
+      z-index: 5000;
+      padding: 0 6px;
+    }
+    .top-btn {
       background: #0f172a;
       color: #e2e8f0;
       border: 1px solid rgba(255,255,255,.15);
       border-radius: 999px;
-      padding: 8px 14px;
+      padding: 6px 10px;
       cursor: pointer;
-      font-size: 13px;
-      z-index: 5000;
+      font-size: 12px;
       white-space: nowrap;
     }
-    .route-btn { right: 230px; }
-    .clear-btn { right: 150px; }
-    .qr-btn { right: 16px; }
-    .qr-btn:hover, .route-btn:hover, .clear-btn:hover { background:#111827; }
+    .top-btn:hover { background:#111827; }
 
-    /* POI panel (left side) */
+    /* POI panel + toggle */
     .poi-panel {
       position: absolute;
-      left: 16px;
-      top: 70px;
-      background: rgba(15,23,42,.85);
+      left: 10px;
+      bottom: 70px;
+      background: rgba(15,23,42,.90);
       padding: 8px;
       border-radius: 12px;
       z-index: 4000;
-      max-width: 190px;
+      max-width: 220px;
+      display: none; /* mobile default: hidden */
+    }
+    .poi-panel.visible {
+      display: block;
     }
     .poi-panel h4 {
       margin: 0 0 6px 0;
@@ -66,18 +75,38 @@
     }
     .poi-panel button {
       width: 100%;
-      background: rgba(255,255,255,.03);
-      border: 1px solid rgba(255,255,255,.04);
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.08);
       color: #e2e8f0;
       font-size: 12px;
-      padding: 4px 6px;
+      padding: 5px 6px;
       border-radius: 8px;
       text-align: left;
       margin-bottom: 4px;
       cursor: pointer;
     }
     .poi-panel button:hover {
-      background: rgba(255,255,255,.09);
+      background: rgba(255,255,255,.12);
+    }
+    .poi-toggle {
+      position: absolute;
+      left: 10px;
+      bottom: 20px;
+      background:#0f172a;
+      color:#e2e8f0;
+      border:1px solid rgba(255,255,255,.15);
+      border-radius:999px;
+      padding: 8px 14px;
+      cursor:pointer;
+      font-size:13px;
+      z-index:4000;
+    }
+    .poi-toggle:hover { background:#111827; }
+
+    /* on wider screens: keep panel always visible, hide toggle */
+    @media (min-width: 768px) {
+      .poi-panel { display:block; bottom: 20px; }
+      .poi-toggle { display:none; }
     }
 
     /* QR modal */
@@ -118,13 +147,15 @@
 <body>
   <div id="map"></div>
 
-  <!-- top buttons -->
-  <button class="route-btn" id="goToStart">🧭 Ir para o início do mercado</button>
-  <button class="clear-btn" id="clearRoute">🧹 Limpar rota</button>
-  <button class="qr-btn" id="openQr">📱 QR do mapa</button>
+  <!-- top center buttons -->
+  <div class="top-buttons">
+    <button class="top-btn" id="goToStart">🧭 Início do mercado</button>
+    <button class="top-btn" id="clearRoute">🧹 Limpar rota</button>
+    <button class="top-btn" id="openQr">📱 QR do mapa</button>
+  </div>
 
-  <!-- left POI panel -->
-  <div class="poi-panel">
+  <!-- POI panel + toggle -->
+  <div class="poi-panel" id="poiPanel">
     <h4>Locais do percurso</h4>
     <button data-poi="rua-estremadouro">1. Rua do Estremadouro</button>
     <button data-poi="largo-paco">2. Largo do Paço</button>
@@ -135,31 +166,32 @@
     <button data-poi="rua-miragaia">7. Rua da Miragaia</button>
     <button data-poi="av-taveiro">8. Av. Viscondessa de Taveiro</button>
   </div>
+  <button class="poi-toggle" id="togglePoi">📍 Locais</button>
 
-  <!-- QR modal -->
+  <!-- QR modal (uses your static qrcode.png) -->
   <div class="qr-overlay" id="qrOverlay">
-  <div class="qr-box">
-    <button class="qr-close" id="closeQr">×</button>
-    <h3>QR do Mapa</h3>
-    <p>Scan para abrir:</p>
-    <img src="qrcode.png" alt="QR code do mapa" style="width:200px;height:200px;margin:0 auto;display:block;">
-    <div class="qr-url">https://nevessusie.github.io/mercadodesantar/</div>
+    <div class="qr-box">
+      <button class="qr-close" id="closeQr">×</button>
+      <h3>QR do Mapa</h3>
+      <p>Scan para abrir:</p>
+      <img src="qrcode.png" alt="QR code do mapa"
+           style="width:200px;height:200px;margin:0 auto;display:block;">
+      <div class="qr-url">https://nevessusie.github.io/mercadodesantar/</div>
+    </div>
   </div>
-</div>
-
 
   <script>
     const START_COORDS = [40.5709815, -7.8907183];
     const MAP_URL = "https://nevessusie.github.io/mercadodesantar/";
 
-    // 1. Map
+    // 1. Map setup
     const map = L.map('map').setView(START_COORDS, 18);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
     L.control.locate({ strings: { title: 'A minha localização' } }).addTo(map);
 
-    // 2. Data structure for route points
+    // 2. Route points
     const ROUTE_POINTS = [
       {
         key: 'rua-estremadouro',
@@ -207,11 +239,10 @@
         key: 'av-taveiro',
         name: 'Av. Viscondessa de Taveiro',
         desc: 'Estrelas',
-        coords: [40.5708916, -7.8908457] // final avenida point
+        coords: [40.5708916, -7.8908457]
       }
     ];
 
-    // 3. Geocoding helpers
     async function geocode(q) {
       const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(q));
       const data = await res.json();
@@ -223,10 +254,10 @@
       return await geocode(p.query);
     }
 
-    // 4. Routing helpers
+    // 3. Routing + markers
     let userRoute = null;
-    const markerMap = {};  // key -> marker
-    const coordMap  = {};  // key -> [lat, lng]
+    const markerMap = {};
+    const coordMap  = {};
 
     function clearUserRoute() {
       if (userRoute) {
@@ -249,7 +280,7 @@
             L.latLng(destLatLng.lat, destLatLng.lng)
           ],
           router: L.Routing.osrmv1({
-            serviceUrl: 'https://routing.openstreetmap.de/routed-foot/route/v1'
+            serviceUrl: 'https://routing.openstreetmap.de/routed-foot'
           }),
           lineOptions: { styles: [{ color: '#22c55e', weight: 5, opacity: 0.95 }] },
           addWaypoints: false,
@@ -271,7 +302,6 @@
       routeFromMyLocationTo(L.latLng(c[0], c[1]));
     }
 
-    // 5. Build route, markers & polyline
     async function buildRoute() {
       const coords = [];
 
@@ -303,7 +333,7 @@
         markerMap[p.key] = m;
       }
 
-      // Close loop back to start (for the red route)
+      // Close loop for red route
       coords.push(START_COORDS);
       const routeLine = L.polyline(coords, { color:'#e11d48', weight:6, opacity:0.95 }).addTo(map);
       map.fitBounds(routeLine.getBounds().pad(0.2));
@@ -311,7 +341,7 @@
 
     buildRoute().catch(e => alert('Erro ao construir percurso: ' + e.message));
 
-    // 6. Wire popups: “Traçar caminho até aqui”
+    // popups: hook the "Traçar caminho até aqui" button
     map.on('popupopen', (e) => {
       const btn = e.popup.getElement().querySelector('button.route-here');
       if (btn) {
@@ -320,7 +350,14 @@
       }
     });
 
-    // 7. Left panel buttons (open popup & focus)
+    // 4. POI panel behaviour
+    const poiPanel = document.getElementById('poiPanel');
+    const togglePoi = document.getElementById('togglePoi');
+
+    togglePoi.addEventListener('click', () => {
+      poiPanel.classList.toggle('visible');
+    });
+
     document.querySelectorAll('.poi-panel button[data-poi]').forEach(btn => {
       btn.addEventListener('click', () => {
         const key = btn.getAttribute('data-poi');
@@ -328,34 +365,36 @@
         if (marker) {
           map.setView(marker.getLatLng(), 18);
           marker.openPopup();
+          // on mobile, hide panel after click to see the map
+          if (window.innerWidth < 768) {
+            poiPanel.classList.remove('visible');
+          }
         }
       });
     });
 
-    // 8. “Ir para o início do mercado” button
+    // 5. top buttons
     document.getElementById('goToStart').addEventListener('click', () => {
       routeFromMyLocationTo(L.latLng(START_COORDS[0], START_COORDS[1]));
     });
-
-    // 9. Clear route button
     document.getElementById('clearRoute').addEventListener('click', clearUserRoute);
 
-    // 10. QR overlay
-   // 10. QR overlay (static PNG)
-const openBtn = document.getElementById('openQr');
-const overlay = document.getElementById('qrOverlay');
-const closeBtn = document.getElementById('closeQr');
+    // 6. QR overlay (using static qrcode.png)
+    const openBtn = document.getElementById('openQr');
+    const overlay = document.getElementById('qrOverlay');
+    const closeBtn = document.getElementById('closeQr');
 
-openBtn.addEventListener('click', () => {
-  overlay.style.display = 'flex';
-});
-
-closeBtn.addEventListener('click', () => overlay.style.display = 'none');
-
-overlay.addEventListener('click', (e) => {
-  if (e.target === overlay) overlay.style.display = 'none';
-});
-
+    openBtn.addEventListener('click', () => {
+      overlay.style.display = 'flex';
+    });
+    closeBtn.addEventListener('click', () => overlay.style.display = 'none');
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.style.display = 'none';
+    });
   </script>
 </body>
 </html>
+
+  
+    
+  
